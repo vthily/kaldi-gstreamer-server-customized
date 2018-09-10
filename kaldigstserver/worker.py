@@ -17,6 +17,7 @@ import codecs
 import zlib
 import base64
 import time
+import redis
 
 import tornado.gen 
 import tornado.process
@@ -35,6 +36,8 @@ logger = logging.getLogger(__name__)
 CONNECT_TIMEOUT = 5
 SILENCE_TIMEOUT = 5
 USE_NNET2 = False
+cache = redis.Redis(host='redis', port=6379)
+
 
         
 class ServerWebsocket(WebSocketClient):
@@ -353,20 +356,38 @@ class ServerWebsocket(WebSocketClient):
                 hyp["transcript"] = processed_transcripts[i]
         raise tornado.gen.Return(full_result)        
 
+def get_hit_count():
+    retries = 5
+    while True:
+        try:
+            return cache.incr('hits')
+        except redis.exceptions.ConnectionError as exc:
+            if retries == 0:
+                raise exc
+            retries -= 1
+            time.sleep(0.5)
+
+
 def main_loop(uri, decoder_pipeline, post_processor, full_post_processor=None):
     while True:
-        ws = ServerWebsocket(uri, decoder_pipeline, post_processor, full_post_processor=full_post_processor)
-        try:
-            logger.info("Opening websocket connection to master server")
-            ws.connect()
-            ws.run_forever()
-        except Exception:
-            logger.error("Couldn't connect to server, waiting for %d seconds", CONNECT_TIMEOUT)
-            time.sleep(CONNECT_TIMEOUT)
-        # fixes a race condition
-        time.sleep(1)
+        count = get_hit_count() 
+        if (count >= 1):
+            logger.error("Expired the trial time. Please contact to provider to get the full licensed version. ")
+            # fixes a race condition
+            time.sleep(1)
+        else: 
+            ws = ServerWebsocket(uri, decoder_pipeline, post_processor, full_post_processor=full_post_processor)
+            try:
+                logger.info("Opening websocket connection to master server")
+                ws.connect()
+                ws.run_forever()
+            except Exception:
+                logger.error("Couldn't connect to server, waiting for %d seconds", CONNECT_TIMEOUT)
+                time.sleep(CONNECT_TIMEOUT)
+            # fixes a race condition
+            time.sleep(1)
 
-
+            
 
 def main():
     logging.basicConfig(level=logging.DEBUG, format="%(levelname)8s %(asctime)s %(message)s ")
