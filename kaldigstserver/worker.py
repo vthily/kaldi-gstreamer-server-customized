@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 CONNECT_TIMEOUT = 5
 SILENCE_TIMEOUT = 5
 USE_NNET2 = False
-cache = redis.Redis(host='redis', port=6379)
-
+cache = redis.Redis(host='localhost', port=6379)
+cache.set('installation_date', time.time())
 
         
 class ServerWebsocket(WebSocketClient):
@@ -98,6 +98,12 @@ class ServerWebsocket(WebSocketClient):
             time.sleep(1)
 
     def received_message(self, m):
+        if (get_running_time() >= 16):
+            self.decoder_pipeline.end_request()
+            self.state = self.STATE_CANCELLING
+            logger.info("%s: You are reached to maximum trial time, please contact with your provider to extend, current worker state %d" % (self.request_id, self.state))    
+            self.finish_request()
+            
         logger.debug("%s: Got message from server of type %s" % (self.request_id, str(type(m))))
         if self.state == self.__class__.STATE_CONNECTED:
             props = json.loads(str(m))
@@ -356,6 +362,7 @@ class ServerWebsocket(WebSocketClient):
                 hyp["transcript"] = processed_transcripts[i]
         raise tornado.gen.Return(full_result)        
 
+
 def get_hit_count():
     retries = 5
     while True:
@@ -368,10 +375,32 @@ def get_hit_count():
             time.sleep(0.5)
 
 
+from datetime import date
+def get_running_time():
+    date_diff = 31
+    try:
+        d0 = date(2018, 9, 01)
+        d1 = date.today()
+        
+        delta = d1 - d0
+        date_diff = delta.days
+        
+        return date_diff
+                    
+    except Exception exc:
+        print(exe.message)
+        time.sleep(0.5)
+        
+        return date_diff
+
+
 def main_loop(uri, decoder_pipeline, post_processor, full_post_processor=None):
     while True:
         count = get_hit_count() 
-        if (count >= 1):
+        #if (count >= 1):
+        time_diff = get_running_time()
+        logger.info("Opening websocket connection to master server")
+        if (time_diff >= 60.0):
             logger.error("Expired the trial time. Please contact to provider to get the full licensed version. ")
             # fixes a race condition
             time.sleep(1)
