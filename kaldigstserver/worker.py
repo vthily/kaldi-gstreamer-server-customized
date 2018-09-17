@@ -37,7 +37,6 @@ CONNECT_TIMEOUT = 5
 SILENCE_TIMEOUT = 5
 USE_NNET2 = False
 cache = redis.Redis(host='localhost', port=6379)
-cache.set('installation_date', time.time())
 
         
 class ServerWebsocket(WebSocketClient):
@@ -367,7 +366,7 @@ def get_hit_count():
     retries = 5
     while True:
         try:
-            return cache.incr('hits')
+            return cache.inc('hits')
         except redis.exceptions.ConnectionError as exc:
             if retries == 0:
                 raise exc
@@ -400,7 +399,7 @@ def main_loop(uri, decoder_pipeline, post_processor, full_post_processor=None):
         #if (count >= 1):
         time_diff = get_running_time()
         logger.info("Opening websocket connection to master server")
-        if (time_diff >= 60.0):
+        if (time_diff >= cache.get('number_days')):
             logger.error("Expired the trial time. Please contact to provider to get the full licensed version. ")
             # fixes a race condition
             time.sleep(1)
