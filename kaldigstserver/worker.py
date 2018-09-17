@@ -387,7 +387,7 @@ def get_running_time():
         
         return date_diff
                     
-    except Exception exc:
+    except Exception:
         print(exe.message)
         time.sleep(0.5)
         
